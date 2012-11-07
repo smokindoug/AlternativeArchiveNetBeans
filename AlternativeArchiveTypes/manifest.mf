@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+OpenIDE-Module: name.dougmcneil.altarchivetypes
+OpenIDE-Module-Layer: name/dougmcneil/altarchivetypes/layer.xml
+OpenIDE-Module-Localizing-Bundle: name/dougmcneil/altarchivetypes/Bundle.properties
+OpenIDE-Module-Specification-Version: 1.0
+
