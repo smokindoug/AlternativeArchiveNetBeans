@@ -59,11 +59,14 @@
                     </file>
                 </folder>
                 <folder name="Factories">
-                    <file name="AltArchiveDataLoader.instance">
+                    <!--<file name="AltArchiveDataLoader.instance">
                         <attr name="SystemFileSystem.icon" urlvalue="nbresloc:/name/dougmcneil/altarchivetypes/tar_16.png"/>
                         <attr name="dataObjectClass" stringvalue="name.dougmcneil.altarchivetypes.AltArchiveDataObject"/>
                         <attr name="instanceCreate" methodvalue="org.openide.loaders.DataLoaderPool.factory"/>
                         <attr name="mimeType" stringvalue="application/x-tar"/>
+                    </file>-->
+                    <file name="name-dougmcneil-altarchivetypes-AltArchiveDataLoader.instance">
+                        <attr name="SystemFileSystem.localizingBundle" stringvalue="name.dougmcneil.altarchivetypes.Bundle"/>
                     </file>
                 </folder>
             </folder>

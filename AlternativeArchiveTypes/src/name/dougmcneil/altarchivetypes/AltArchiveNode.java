@@ -35,12 +35,12 @@ final class AltArchiveNode extends DataNode {
         return null;
     }
 
-    private static Children childrenFor(FileObject jar) {
-//        if (!FileUtil.isArchiveFile(jar)) {
+    private static Children childrenFor(FileObject aar) {
+//        if (!FileUtil.isArchiveFile(aar)) {
             // Maybe corrupt, etc.
   //          return Children.LEAF;
  //       }
-        FileObject root = FileUtil.getAltArchiveRoot(jar);
+        FileObject root = FileUtil.getAltArchiveRoot(aar);
         if (root != null) {
             DataFolder df = DataFolder.findFolder(root);
             return df.createNodeChildren(DataFilter.ALL);

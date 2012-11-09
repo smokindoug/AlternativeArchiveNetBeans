@@ -8,6 +8,7 @@ and open the template in the editor.
     <file>
         <ext name="tar"/>
         <ext name="tgz"/>
+        <ext name="gz"/>
         <resolver mime="application/x-tar"/>
     </file>
 </MIME-resolver>

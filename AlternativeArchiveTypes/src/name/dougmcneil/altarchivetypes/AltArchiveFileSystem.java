@@ -21,6 +21,7 @@ import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,14 +31,13 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipException;
-import org.openide.filesystems.FileSystem;
+import org.openide.filesystems.AbstractFileSystem;
 import org.openide.filesystems.FileChangeAdapter;
 import org.openide.filesystems.FileChangeListener;
 import org.openide.filesystems.FileEvent;
 import org.openide.filesystems.FileObject;
 import org.openide.filesystems.FileRenameEvent;
 import org.openide.filesystems.FileUtil;
-import org.openide.filesystems.JarFileSystem;
 import org.openide.util.NbBundle;
 import org.openide.util.RequestProcessor;
 import org.openide.util.Utilities;
@@ -46,9 +46,12 @@ import org.openide.util.Utilities;
  * Not sure subclass this is going to do any good...
  * @author doug
  */
-public class AltArchiveFileSystem extends JarFileSystem {
+public class AltArchiveFileSystem extends AbstractFileSystem {
+    /** generated Serialized Version UID */
+    static final long serialVersionUID = -1L;
 
-    private static final Logger LOGGER = Logger.getLogger(JarFileSystem.class.getName());
+
+    private static final Logger LOGGER = Logger.getLogger(AltArchiveFileSystem.class.getName());
 
     /** One request proccesor shared for all instances of JarFileSystem*/
     private static final RequestProcessor req = new RequestProcessor("AltArchive Fs - modification watcher", 1, false, false); // NOI18N
@@ -61,7 +64,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
 
     private transient AltArchiveFile altArchive;
 
-    /** Time of request for opening of jar. */
+    /** Time of request for opening of aar. */
     private transient long openRequestTime = 0;
 
     /** Cached image of AltArchiveFile capable of answering queries on type and children.
@@ -70,7 +73,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
     private transient Cache strongCache;
 
     private transient long lastModification = 0;
-    /** Actual time for which closing of jar is postponed. */
+    /** Actual time for which closing of aar is postponed. */
     private transient int closeDelay = 300;
 
     /** The soft part of the cache reference. For simplicity never null*/
@@ -93,10 +96,34 @@ public class AltArchiveFileSystem extends JarFileSystem {
     /**
     * Opened zip file of this filesystem is stored here or null.
     */
-    private transient AltArchiveFile jar;
+    private transient AltArchiveFile aar;
 
-    @Override
-    public void setJarFile(final File aRoot)
+    /**
+    * Default constructor.
+     * <p><strong>Most module code should never create an instance of this class directly.</strong>
+     * Use {@link FileUtil#getArchiveRoot(FileObject)} instead.</p>
+    */
+    public AltArchiveFileSystem() {
+        Impl impl = new Impl(this);
+        this.list = impl;
+        this.info = impl;
+        this.change = impl;
+        this.attr = impl;
+    }
+
+    AltArchiveFileSystem(File aRoot) throws IOException {
+        this();
+        try {
+            setAltArchiveFile(aRoot, true, false);
+        } catch (PropertyVetoException ex) {
+            // cannot happen, setSystemName can throw the exception only
+            // if the filesystem is already in Repository, which this one
+            // is not.
+            throw new IOException(ex);
+        }
+    }
+
+    public void setAltArchiveFile(final File aRoot)
             throws IOException, PropertyVetoException {
         setAltArchiveFile(aRoot, true, true);
     }
@@ -123,19 +150,19 @@ public class AltArchiveFileSystem extends JarFileSystem {
         }
 
         if (aRoot == null) {
-            throw new IOException(NbBundle.getMessage(JarFileSystem.class, "EXC_NotValidFile", aRoot));
+            throw new IOException(NbBundle.getMessage(AltArchiveFileSystem.class, "EXC_NotValidFile", aRoot));
         }
 
         if (!aRoot.exists()) {
-            throw new IOException(NbBundle.getMessage(JarFileSystem.class, "EXC_FileNotExists", aRoot.getAbsolutePath()));
+            throw new IOException(NbBundle.getMessage(AltArchiveFileSystem.class, "EXC_FileNotExists", aRoot.getAbsolutePath()));
         }
 
         if (!aRoot.canRead()) {
-            throw new IOException(NbBundle.getMessage(JarFileSystem.class, "EXC_CanntRead", aRoot.getAbsolutePath()));
+            throw new IOException(NbBundle.getMessage(AltArchiveFileSystem.class, "EXC_CanntRead", aRoot.getAbsolutePath()));
         }
 
         if (!aRoot.isFile()) {
-            throw new IOException(NbBundle.getMessage(JarFileSystem.class, "EXC_NotValidFile", aRoot.getAbsolutePath()));
+            throw new IOException(NbBundle.getMessage(AltArchiveFileSystem.class, "EXC_NotValidFile", aRoot.getAbsolutePath()));
         }
 
         String s;
@@ -149,7 +176,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
                 tempAltArchive = new AltArchiveFile(s);
                 LOGGER.log(Level.FINE, "opened: "+ System.currentTimeMillis()+ "   " + s);//NOI18N
             } catch (ZipException e) {
-                throw new IOException(NbBundle.getMessage(JarFileSystem.class, "EXC_NotValidJarFile2", e.getLocalizedMessage(), s));
+                throw new IOException(NbBundle.getMessage(AltArchiveFileSystem.class, "EXC_NotValidJarFile2", e.getLocalizedMessage(), s));
             }
         }
 
@@ -227,8 +254,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
     /** Get the file path for the ZIP or JAR file.
     * @return the file path
     */
-    @Override
-    public File getJarFile() {
+    public File getAltArchiveFile() {
         return root;
     }
 
@@ -238,10 +264,9 @@ public class AltArchiveFileSystem extends JarFileSystem {
     */
     @Override
     public String getDisplayName() {
-        return root != null ? root.getAbsolutePath() : NbBundle.getMessage(JarFileSystem.class, "JAR_UnknownJar");
+        return root != null ? root.getAbsolutePath() : NbBundle.getMessage(System.class, "JAR_UnknownJar");
     }
 
-    @Override
     protected InputStream inputStream(String name) throws java.io.FileNotFoundException {
         InputStream is = null;
 
@@ -250,7 +275,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
                 AltArchiveFile j = reOpenAltArchiveFile();
 
                 if (j != null) {
-                    AltArchiveFile.AltArchiveEntry je = j.getAltArchiveEntry(name);
+                    AltArchiveEntry je = j.getAltArchiveEntry(name);
 
                     if (je != null) {
                         if (je.getSize() < MEM_STREAM_SIZE) {
@@ -298,7 +323,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
         return new Ref<T>(fo);
     }
 
-    private InputStream getMemInputStream(AltArchiveFile jf, AltArchiveFile.AltArchiveEntry je)
+    private InputStream getMemInputStream(AltArchiveFile jf, AltArchiveEntry je)
     throws IOException {
         InputStream is = jf.getInputStream(je);
         ByteArrayOutputStream os = new ByteArrayOutputStream(is.available());
@@ -327,6 +352,11 @@ public class AltArchiveFileSystem extends JarFileSystem {
         }
     }
 
+    @Override
+    public boolean isReadOnly() {
+        return true;
+    }
+
     /** Use soft-references to not throw away the data that quickly.
      * JarFS if often queried for its FOs e.g. by java parser, which
      * leaves the references immediately.
@@ -352,7 +382,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
         aliveCount = 0;
 
         try {
-            setJarFile(root);
+            setAltArchiveFile(root);
         } catch (PropertyVetoException ex) {
             throw new IOException(ex.getMessage());
         } catch (IOException iex) {
@@ -367,7 +397,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
                 closeTask.cancel();
             }
 
-            // #167527 - calculate adaptive delay before closing jar
+            // #167527 - calculate adaptive delay before closing aar
             long now = System.currentTimeMillis();
             long requestPeriod = now - openRequestTime;
             openRequestTime = now;
@@ -399,10 +429,10 @@ public class AltArchiveFileSystem extends JarFileSystem {
         return new Runnable() {
                 public void run() {
                     synchronized (closeSync) {
-                    final AltArchiveFile jarFile = getAltArchive(false);
-                        if (jarFile != null) {
+                    final AltArchiveFile aarFile = getAltArchive(false);
+                        if (aarFile != null) {
                             try {
-                                jarFile.close();
+                                aarFile.close();
                                 LOGGER.log(Level.FINE, "closed: "+ System.currentTimeMillis()+ "   " + root.getAbsolutePath());//NOI18N
                             } catch (Exception exc) {
                                 // ignore exception during closing, just log it
@@ -419,14 +449,14 @@ public class AltArchiveFileSystem extends JarFileSystem {
 
     /** Getter for entry.
     */
-    private final AltArchiveFile.AltArchiveEntry getEntry(String file) {
+    private final AltArchiveEntry getEntry(String file) {
         AltArchiveFile j = null;
 
         try {
             synchronized (closeSync) {
                 j = reOpenAltArchiveFile();
 
-                AltArchiveFile.AltArchiveEntry je = null;
+                AltArchiveEntry je = null;
                 if (j != null) {
                     je = j.getAltArchiveEntry(file);
                 }
@@ -438,20 +468,21 @@ public class AltArchiveFileSystem extends JarFileSystem {
         } catch (IOException iox) {
         }
 
-        return getAltArchive(false).newAltArchiveEntry(file);
+        //return getAltArchive(false).newAltArchiveEntry(file);
+        return null;
     }
 
     /**
-     * @return the jar
+     * @return the aar
      */
     private AltArchiveFile getAltArchive(boolean create) {
         assert Thread.holdsLock(closeSync);
-        if (jar == null && create) {
+        if (aar == null && create) {
             try {
                 if (root.canRead()) {
-                    jar = new AltArchiveFile(root);
+                    aar = new AltArchiveFile(root);
                     LOGGER.log(Level.FINE, "opened: {0} {1}", new Object[]{root.getAbsolutePath(), System.currentTimeMillis()}); //NOI18N
-                    return jar;
+                    return aar;
                 }
             } catch (ZipException ex) {
                 LOGGER.log(Level.INFO, ex.getMessage(), ex);
@@ -460,23 +491,23 @@ public class AltArchiveFileSystem extends JarFileSystem {
             }
             LOGGER.log(Level.WARNING, "cannot open {0}", root.getAbsolutePath()); // NOI18N
         }
-        return jar;
+        return aar;
     }
 
-    private InputStream getTemporaryInputStream(AltArchiveFile jf, AltArchiveFile.AltArchiveEntry je, boolean forceRecreate)
+    private InputStream getTemporaryInputStream(AltArchiveFile jf, AltArchiveEntry je, boolean forceRecreate)
     throws IOException {
         String filePath = jf.getName();
         String entryPath = je.getName();
-        StringBuffer jarCacheFolder = new StringBuffer("jarfscache"); //NOI18N
-        jarCacheFolder.append(System.getProperty("user.name")).append("/"); //NOI18N
+        StringBuffer aarCacheFolder = new StringBuffer("aarfscache"); //NOI18N
+        aarCacheFolder.append(System.getProperty("user.name")).append("/"); //NOI18N
 
-        File jarfscache = new File(System.getProperty("java.io.tmpdir"), jarCacheFolder.toString()); //NOI18N
+        File aarfscache = new File(System.getProperty("java.io.tmpdir"), aarCacheFolder.toString()); //NOI18N
 
-        if (!jarfscache.exists()) {
-            jarfscache.mkdirs();
+        if (!aarfscache.exists()) {
+            aarfscache.mkdirs();
         }
 
-        File f = new File(jarfscache, temporaryName(filePath, entryPath));
+        File f = new File(aarfscache, temporaryName(filePath, entryPath));
 
         boolean createContent = !f.exists();
 
@@ -594,21 +625,21 @@ public class AltArchiveFileSystem extends JarFileSystem {
                 }
 
                 try {
-                    Enumeration<AltArchiveFile.AltArchiveEntry> en = j.entries();
-                    // #144166 - If duplicate entries found in jar, it is logged
+                    Enumeration<AltArchiveEntry> en = j.entries();
+                    // #144166 - If duplicate entries found in aar, it is logged
                     // and only unique entries are show. It can happen because
-                    // Ant's jar task can produce such jars.
+                    // Ant's aar task can produce such aars.
                     Set<String> duplicateCheck = new HashSet<String>();
-                    Set<AltArchiveFile.AltArchiveEntry> uniqueEntries = new HashSet<AltArchiveFile.AltArchiveEntry>();
+                    Set<AltArchiveEntry> uniqueEntries = new HashSet<AltArchiveEntry>();
                     boolean duplicateReported = false;
                     while (en.hasMoreElements()) {
-                        AltArchiveFile.AltArchiveEntry entry = en.nextElement();
+                        AltArchiveEntry entry = en.nextElement();
                         String name = entry.getName();
                         if (duplicateCheck.add(name)) {
                             uniqueEntries.add(entry);
                         } else {
                             if (!duplicateReported) {
-                                LOGGER.warning("Duplicate entries in " + getJarFile() + ": " + name + "; please report to JAR creator.");
+                                LOGGER.warning("Duplicate entries in " + getAltArchiveFile() + ": " + name + "; please report to JAR creator.");
                                 // report just once
                                 duplicateReported = true;
                             }
@@ -621,7 +652,7 @@ public class AltArchiveFileSystem extends JarFileSystem {
 
                     return newCache;
                 } catch (Throwable t) {
-                    // jar is invalid; perhaps it's being rebuilt
+                    // aar is invalid; perhaps it's being rebuilt
                     // don't touch filesystem
                     return Cache.INVALID;
                 }
@@ -670,15 +701,124 @@ public class AltArchiveFileSystem extends JarFileSystem {
         this.altArchive = tempAltArchive;
     }
 
+    //
+    // List
+    //
+    protected String[] children(String name) {
+        Cache cache = getCache();
+
+        return cache.getChildrenOf(name);
+    }
+
+    //
+    // Change
+    //
+    protected void createFolder(String name) throws java.io.IOException {
+        throw new IOException();
+    }
+
+    protected void createData(String name) throws IOException {
+        throw new IOException();
+    }
+
+    protected void rename(String oldName, String newName)
+    throws IOException {
+        throw new IOException();
+    }
+
+    protected void delete(String name) throws IOException {
+        throw new IOException();
+    }
+
+    //
+    // Info
+    //
+    protected Date lastModified(String name) {
+        long t;
+        if (name.length() == 0) {
+            t = getAltArchiveFile().lastModified();
+        } else {
+            try {
+                t = getEntry(name).getTime();
+            } finally {
+                closeCurrentRoot(false);
+            }
+        }
+        return new Date(t);
+    }
+
+    protected boolean folder(String name) {
+        if ("".equals(name)) {
+            return true; // NOI18N
+        }
+
+        Cache cache = getCache();
+
+        return cache.isFolder(name);
+    }
+
+    protected boolean readOnly(String name) {
+        return true;
+    }
+
+    protected String mimeType(String name) {
+        return null;
+    }
+
+    protected long size(String name) {
+        long retVal = getEntry(name).getSize();
+        closeCurrentRoot(false);
+
+        return (retVal == -1) ? 0 : retVal;
+    }
+
+
+    protected OutputStream outputStream(String name) throws java.io.IOException {
+        throw new IOException();
+    }
+
+    protected void lock(String name) throws IOException {
+        throw new IOException(NbBundle.getMessage(AltArchiveFileSystem.class, "EXC_CannotLock_JAR", name, root));
+    }
+
+    protected void unlock(String name) {
+    }
+
+    protected void markUnimportant(String name) {
+    }
+
+    protected Object readAttribute(String name, String attrName) {
+        if ("java.io.File".equals(attrName)) {
+            return null;
+        }
+        return null;
+    }
+
+    protected void writeAttribute(String name, String attrName, Object value)
+    throws IOException {
+        throw new IOException("Setting attribute not allowed for AltArchiveFileSystem [" + this.getDisplayName() + "!" + name + " <- " + attrName + "=" + value + "]");  //NOI18N
+    }
+
+    // attributes of tar entry
+    protected Enumeration<String>  attributes(String name) {
+        return org.openide.util.Enumerations.empty();
+    }
+
+    protected void renameAttributes(String oldName, String newName) {
+    }
+
+    protected void deleteAttributes(String name) {
+    }
+
     private static class Cache {
-        private static final Set<AltArchiveFile.AltArchiveEntry> EMPTY_SET = Collections.emptySet();
+        private static final Set<AltArchiveEntry> EMPTY_SET = Collections.emptySet();
         static final Cache INVALID = new Cache(EMPTY_SET);
         byte[] names = new byte[1000];
         private int nameOffset = 0;
         int[] EMPTY = new int[0];
         private Map<String, Folder> folders = new HashMap<String, Folder>();
 
-        public Cache(Set<AltArchiveFile.AltArchiveEntry> entries) {
+        public Cache(Set<AltArchiveEntry> entries) {
             parse(entries);
             trunc();
         }
@@ -697,10 +837,10 @@ public class AltArchiveFileSystem extends JarFileSystem {
             return new String[] {  };
         }
 
-        private void parse(Set<AltArchiveFile.AltArchiveEntry> entries) {
+        private void parse(Set<AltArchiveEntry> entries) {
             folders.put("", new Folder()); // root folder
 
-            for (AltArchiveFile.AltArchiveEntry entry : entries) {
+            for (AltArchiveEntry entry : entries) {
                 String name = entry.getName();
                 boolean isFolder = false;
 
@@ -834,4 +974,230 @@ public class AltArchiveFileSystem extends JarFileSystem {
             }
         }
     }
+    /** Implementation of all interfaces List, Change, Info and Attr
+    * that delegates to JarFileSystem
+    */
+    public static class Impl extends Object implements AbstractFileSystem.List, AbstractFileSystem.Info,
+        AbstractFileSystem.Change, AbstractFileSystem.Attr {
+        /** generated Serialized Version UID */
+        static final long serialVersionUID = -67233308132567232L;
+
+        /** the pointer to filesystem */
+        private AltArchiveFileSystem fs;
+
+        /** Constructor.
+        * @param fs the filesystem to delegate to
+        */
+        public Impl(AltArchiveFileSystem fs) {
+            this.fs = fs;
+        }
+
+        /*
+        *
+        * Scans children for given name
+        */
+        public String[] children(String name) {
+            return fs.children(name);
+        }
+
+        //
+        // Change
+        //
+
+        /*
+        * Creates new folder named name.
+        * @param name name of folder
+        * @throws IOException if operation fails
+        */
+        public void createFolder(String name) throws java.io.IOException {
+            fs.createFolder(name);
+        }
+
+        /*
+        * Create new data file.
+        *
+        * @param name name of the file
+        *
+        * @return the new data file object
+        * @exception IOException if the file cannot be created (e.g. already exists)
+        */
+        public void createData(String name) throws IOException {
+            fs.createData(name);
+        }
+
+        /*
+        * Renames a file.
+        *
+        * @param oldName old name of the file
+        * @param newName new name of the file
+        */
+        public void rename(String oldName, String newName)
+        throws IOException {
+            fs.rename(oldName, newName);
+        }
+
+        /*
+        * Delete the file.
+        *
+        * @param name name of file
+        * @exception IOException if the file could not be deleted
+        */
+        public void delete(String name) throws IOException {
+            fs.delete(name);
+        }
+
+        //
+        // Info
+        //
+
+        /*
+        *
+        * Get last modification time.
+        * @param name the file to test
+        * @return the date
+        */
+        public java.util.Date lastModified(String name) {
+            return fs.lastModified(name);
+        }
+
+        /*
+        * Test if the file is folder or contains data.
+        * @param name name of the file
+        * @return true if the file is folder, false otherwise
+        */
+        public boolean folder(String name) {
+            return fs.folder(name);
+        }
+
+        /*
+        * Test whether this file can be written to or not.
+        * @param name the file to test
+        * @return <CODE>true</CODE> if file is read-only
+        */
+        public boolean readOnly(String name) {
+            return fs.readOnly(name);
+        }
+
+        /*
+        * Get the MIME type of the file.
+        * Uses {@link FileUtil#getMIMEType}.
+        *
+        * @param name the file to test
+        * @return the MIME type textual representation, e.g. <code>"text/plain"</code>
+        */
+        public String mimeType(String name) {
+            return fs.mimeType(name);
+        }
+
+        /*
+        * Get the size of the file.
+        *
+        * @param name the file to test
+        * @return the size of the file in bytes or zero if the file does not contain data (does not
+        *  exist or is a folder).
+        */
+        public long size(String name) {
+            return fs.size(name);
+        }
+
+        /*
+        * Get input stream.
+        *
+        * @param name the file to test
+        * @return an input stream to read the contents of this file
+        * @exception FileNotFoundException if the file does not exists or is invalid
+        */
+        public InputStream inputStream(String name) throws java.io.FileNotFoundException {
+            return fs.inputStream(name);
+        }
+
+        /*
+        * Get output stream.
+        *
+        * @param name the file to test
+        * @return output stream to overwrite the contents of this file
+        * @exception IOException if an error occures (the file is invalid, etc.)
+        */
+        public OutputStream outputStream(String name) throws java.io.IOException {
+            return fs.outputStream(name);
+        }
+
+        /*
+        * Does nothing to lock the file.
+        *
+        * @param name name of the file
+        */
+        public void lock(String name) throws IOException {
+            fs.lock(name);
+        }
+
+        /*
+        * Does nothing to unlock the file.
+        *
+        * @param name name of the file
+        */
+        public void unlock(String name) {
+            fs.unlock(name);
+        }
+
+        /*
+        * Does nothing to mark the file as unimportant.
+        *
+        * @param name the file to mark
+        */
+        public void markUnimportant(String name) {
+            fs.markUnimportant(name);
+        }
+
+        /*
+        * Get the file attribute with the specified name.
+        * @param name the file
+        * @param attrName name of the attribute
+        * @return appropriate (serializable) value or <CODE>null</CODE> if the attribute is unset (or could not be properly restored for some reason)
+        */
+        public Object readAttribute(String name, String attrName) {
+            return fs.readAttribute(name, attrName);
+        }
+
+        /*
+        * Set the file attribute with the specified name.
+        * @param name the file
+        * @param attrName name of the attribute
+        * @param value new value or <code>null</code> to clear the attribute. Must be serializable, although particular filesystems may or may not use serialization to store attribute values.
+        * @exception IOException if the attribute cannot be set. If serialization is used to store it, this may in fact be a subclass such as {@link NotSerializableException}.
+        */
+        public void writeAttribute(String name, String attrName, Object value)
+        throws IOException {
+            fs.writeAttribute(name, attrName, value);
+        }
+
+        /*
+        * Get all file attribute names for the file.
+        * @param name the file
+        * @return enumeration of keys (as strings)
+        */
+        public Enumeration<String> attributes(String name) {
+            return fs.attributes(name);
+        }
+
+        /*
+        * Called when a file is renamed, to appropriatelly update its attributes.
+        * <p>
+        * @param oldName old name of the file
+        * @param newName new name of the file
+        */
+        public void renameAttributes(String oldName, String newName) {
+            fs.renameAttributes(oldName, newName);
+        }
+
+        /*
+        * Called when a file is deleted to also delete its attributes.
+        *
+        * @param name name of the file
+        */
+        public void deleteAttributes(String name) {
+            fs.deleteAttributes(name);
+        }
+    }
+
 }

@@ -6,7 +6,6 @@
 package name.dougmcneil.altarchivetypes;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -15,8 +14,6 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import name.dougmcneil.altarchivetypes.AltArchiveFile;
-import name.dougmcneil.altarchivetypes.AltArchiveFileSystem;
 import org.openide.filesystems.FileObject;
 import org.openide.filesystems.FileStateInvalidException;
 import org.openide.filesystems.FileSystem;
@@ -128,13 +125,16 @@ public final class FileUtil  {
      * Clients may need to first call {@link #isArchiveFile(URL)} to determine if the URL
      * refers to an archive file.
      * @param url of a ZIP- (or JAR-) format archive file
-     * @return the <code>jar</code>-protocol URL of the root of the archive
+     * @return the <code>aar</code>-protocol URL of the root of the archive
      * @since 4.48
      */
     public static URL getAltArchiveRoot(URL url) {
         try {
             // XXX TBD whether the url should ever be escaped...
-            return new URL("jar:" + url + "!/"); // NOI18N
+            URL aar = new URL(AltArchiveURLMapper.ALTARCHIVE_PROTOCOL, url.getHost(), url.getPort(), ((url.getProtocol().equals(AltArchiveURLMapper.ALTARCHIVE_PROTOCOL)) ? AltArchiveURLMapper.ALTARCHIVE_PROTOCOL + ":" : "file:") + url.getFile() + "!/",
+                    new AARURLStreamHandler());
+            return aar;
+            //return new URL("aar:" + url + "!/"); // NOI18N
         } catch (MalformedURLException e) {
             throw new AssertionError(e);
         }
@@ -156,9 +156,9 @@ public final class FileUtil  {
             FileSystem fs = fo.getFileSystem();
 
             if (fs instanceof AltArchiveFileSystem) {
-                File jarFile = ((AltArchiveFileSystem) fs).getJarFile();
+                File aarFile = ((AltArchiveFileSystem) fs).getAltArchiveFile();
 
-                return org.openide.filesystems.FileUtil.toFileObject(jarFile);
+                return org.openide.filesystems.FileUtil.toFileObject(aarFile);
             }
         } catch (FileStateInvalidException e) {
             Exceptions.printStackTrace(e);
@@ -169,35 +169,36 @@ public final class FileUtil  {
 
     /**
      * Returns the URL of the archive file containing the file
-     * referred to by a <code>jar</code>-protocol URL.
+     * referred to by a <code>aar</code>-protocol URL.
      * <strong>Remember</strong> that any path within the archive is discarded
      * so you may need to check for non-root entries.
      * @param url a URL
      * @return the embedded archive URL, or null if the URL is not a
-     *         <code>jar</code>-protocol URL containing <code>!/</code>
+     *         <code>aar</code>-protocol URL containing <code>!/</code>
      * @since 4.48
      */
     public static URL getAltArchiveFile(URL url) {
         String protocol = url.getProtocol();
 
-        if ("jar".equals(protocol)) { //NOI18N
+        if (AltArchiveURLMapper.ALTARCHIVE_PROTOCOL.equals(protocol)) { //NOI18N
 
             String path = url.getPath();
+            // secret in path
             int index = path.indexOf("!/"); //NOI18N
 
             if (index >= 0) {
-                String jarPath = null;
+                String aarPath = null;
                 try {
-                    jarPath = path.substring(0, index);
-                    if (jarPath.indexOf("file://") > -1 && jarPath.indexOf("file:////") == -1) {  //NOI18N
+                    aarPath = path.substring(0, index);
+                    if (aarPath.indexOf("file://") > -1 && aarPath.indexOf("file:////") == -1) {  //NOI18N
                         /* Replace because JDK application classloader wrongly recognizes UNC paths. */
-                        jarPath = jarPath.replaceFirst("file://", "file:////");  //NOI18N
+                        aarPath = aarPath.replaceFirst("file://", "file:////");  //NOI18N
                     }
-                    return new URL(jarPath);
+                    return new URL(aarPath);
 
                 } catch (MalformedURLException mue) {
                     Exceptions.printStackTrace(Exceptions.attachMessage(mue,
-                    "URL: " + url.toExternalForm() +" jarPath: " + jarPath));   //NOI18N
+                    "URL: " + url.toExternalForm() +" aarPath: " + aarPath));   //NOI18N
                 }
             }
         }
@@ -259,7 +260,7 @@ public final class FileUtil  {
     public static boolean isAltArchiveFile(URL url) {
         Parameters.notNull("url", url);  //NOI18N
 
-        if ("jar".equals(url.getProtocol())) { //NOI18N
+        if (AltArchiveURLMapper.ALTARCHIVE_PROTOCOL.equals(url.getProtocol())) { //NOI18N
 
             //Already inside archive, return false
             return false;
@@ -280,7 +281,7 @@ public final class FileUtil  {
     /**
      * Convert a file such as would be shown in a classpath entry into a proper folder URL.
      * If the file looks to represent a directory, a <code>file</code> URL will be created.
-     * If it looks to represent a ZIP archive, a <code>jar</code> URL will be created.
+     * If it looks to represent a ZIP archive, a <code>aar</code> URL will be created.
      * @param entry a file or directory name
      * @return an appropriate classpath URL which will always end in a slash (<samp>/</samp>),
      *         or null for an existing file which does not look like a valid archive
@@ -309,7 +310,7 @@ public final class FileUtil  {
 
     /**
      * Convert a classpath-type URL to a corresponding file.
-     * If it is a <code>jar</code> URL representing the root folder of a local disk archive,
+     * If it is a <code>aar</code> URL representing the root folder of a local disk archive,
      * that archive file will be returned.
      * If it is a <code>file</code> URL representing a local disk folder,
      * that folder will be returned.
@@ -319,7 +320,7 @@ public final class FileUtil  {
      */
     public static File archiveOrDirForURL(URL entry) {
         String u = entry.toString();
-        if (u.startsWith("jar:file:") && u.endsWith("!/")) { // NOI18N
+        if (u.startsWith(AltArchiveURLMapper.ALTARCHIVE_PROTOCOL + ":file:") && u.endsWith("!/")) { // NOI18N
             return new File(URI.create(u.substring(4, u.length() - 2)));
         } else if (u.startsWith("file:")) { // NOI18N
             return new File(URI.create(u));
