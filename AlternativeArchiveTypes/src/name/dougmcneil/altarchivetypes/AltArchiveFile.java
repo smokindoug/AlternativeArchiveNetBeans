@@ -17,11 +17,13 @@ import java.util.Map;
 import java.util.zip.ZipException;
 import org.apache.commons.compress.archivers.tar.*;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 import org.openide.util.Exceptions;
 
 /**
  *
  * @author doug
+ * @todo a generic approach should be used
  */
 public class AltArchiveFile {
 
@@ -32,16 +34,19 @@ public class AltArchiveFile {
 
     public AltArchiveFile(File file) throws ZipException, IOException {
         if (file.getName().endsWith(".tgz")) {
-            _source = new TgzSourceHandler(file, new FileInputStream(file),
-                    file.getName());
+            _source = new TgzSourceHandler(file, new FileInputStream(file),  file.getName());
             return;
         } else if (file.getName().endsWith(".gz")) {
-           _source = new GzSourceHandler(file,  new FileInputStream(file),
-                    file.getName());
+           _source = new GzSourceHandler(file,  new FileInputStream(file),  file.getName());
            return;
+        } else if (file.getName().endsWith(".bz2") || file.getName().endsWith(".bz")) {
+           _source = new Bz2SourceHandler(file,  new FileInputStream(file),  file.getName());
+           return;
+        } else if (file.getName().endsWith(".tbz") || file.getName().endsWith(".tbz2")) {
+            _source = new TbzSourceHandler(file, new FileInputStream(file),  file.getName());
+            return;
         }
-        _source = new TarSourceHandler(file,new FileInputStream(file),
-                file.getName());
+        _source = new TarSourceHandler(file,new FileInputStream(file),  file.getName());
     }
 
     public AltArchiveFile(String path) throws ZipException, IOException {
@@ -323,7 +328,7 @@ public class AltArchiveFile {
             }
             _is.close();
             _entries = new HashMap<String, AltArchiveEntry>(1);
-            Entry entry = new Entry(name.dougmcneil.altarchivetypes.AltArchiveFile.this);
+            Entry entry = new Entry(_file, 3, name.dougmcneil.altarchivetypes.AltArchiveFile.this);
             _entries.put(entry.getName(), entry);
         }
 
@@ -339,28 +344,138 @@ public class AltArchiveFile {
                     new FileInputStream(_file)));
         }
 
-        private class Entry extends AltArchiveEntry {
+    }
+    
+    private final class TbzSourceHandler extends SourceHandler {
+        TbzSourceHandler(File file, InputStream is, String name)
+                throws IOException {
+            super(file, new BZip2CompressorInputStream(is), name);
+            _is.mark(1024);
+            byte[] buffer = new byte[1024];
+            int read = _is.read(buffer);
+            if (read > 0) {
+                _isAltArchive = TarArchiveInputStream.matches(buffer, read);
+                _is.reset();
+                if (!_isAltArchive && (read > 262)) {
+                    // try 7-zip all 0 test
+                    for (int i = 257; i < 261; i++) {
+                        if (buffer[i] != 0) {
+                            return;
+                        }
+                    }
+                    _isAltArchive = true;
+                }
+            }
+        }
 
-            public Entry(AltArchiveFile outer) {
-                super(_file.getName().substring(0,
-                        _file.getName().length() - 3), outer);
+        @Override
+        void enumerateEntries() throws IOException {
+            if (_hasEnumerated) {
+                return;
             }
-            @Override
-            public long getSize() {
-                return _file.length();
+            _hasEnumerated = true;
+            if (!_isAltArchive) {
+                return;
             }
-
-            @Override
-            public String getName() {
-                return _name;
+            _archiveStream = new TarArchiveInputStream(_is);
+            _entries = new HashMap<String, AltArchiveEntry>();
+            TarArchiveEntry entry;
+            while ((entry = _archiveStream.getNextTarEntry()) != null) {
+                _entries.put(entry.getName(), new TarEntry(entry, name.dougmcneil.altarchivetypes.AltArchiveFile.this));
             }
-
-            @Override
-            public long getTime() {
-                return _file.lastModified();
-            }
+            _is.close();
 
         }
+
+        @Override
+        InputStream getInputStream(AltArchiveEntry entry) throws IOException {
+            if (entry == null) {
+                return null;
+            }
+            if  (_file == null) {
+                return null;
+            }
+            _archiveStream.close();
+            _archiveStream = new TarArchiveInputStream(
+                    new BufferedInputStream(new BZip2CompressorInputStream(
+                    new FileInputStream(_file))));
+            TarArchiveEntry target;
+            while ((target = _archiveStream.getNextTarEntry()) != null) {
+                if (target.getName().equals(entry._name)) {
+                    return _archiveStream;
+                }
+            }
+            return null;
+        }
+    }
+
+    private final class Bz2SourceHandler extends SourceHandler {
+
+        private Entry _entry;
+        Bz2SourceHandler(File file, InputStream is, String name)
+                throws IOException {
+            super(file, new BZip2CompressorInputStream(is), name);
+            InputStream x = new FileInputStream(_file);
+            x.mark(1024);
+            byte[] buffer = new byte[1024];
+            int read = x.read(buffer);
+            if (read > 0) {
+                _isAltArchive = BZip2CompressorInputStream.matches(buffer, read);
+            }
+            x.close();
+        }
+
+        @Override
+        void enumerateEntries() throws IOException {
+            if (_hasEnumerated) {
+                return;
+            }
+            _hasEnumerated = true;
+            if (!_isAltArchive) {
+                return;
+            }
+            _is.close();
+            _entries = new HashMap<String, AltArchiveEntry>(1);
+            Entry entry = new Entry(_file, 4, name.dougmcneil.altarchivetypes.AltArchiveFile.this);
+            _entries.put(entry.getName(), entry);
+        }
+
+        @Override
+        InputStream getInputStream(AltArchiveEntry entry) throws IOException {
+            if (entry == null) {
+                return null;
+            }
+            if  (_file == null) {
+                return null;
+            }
+            return new BufferedInputStream(new BZip2CompressorInputStream(
+                    new FileInputStream(_file)));
+        }
+
+    }
+
+    static class Entry extends AltArchiveEntry {
+        private final File _file;
+        public Entry(File file, int adjust, AltArchiveFile outer) {
+            super(file.getName().substring(0,
+                    file.getName().length() - adjust), outer);
+            _file = file;
+        }
+        @Override
+        public long getSize() {
+            return _file.length();
+        }
+
+        @Override
+        public String getName() {
+            return _name;
+        }
+
+        @Override
+        public long getTime() {
+            return _file.lastModified();
+        }
+
     }
 }
 

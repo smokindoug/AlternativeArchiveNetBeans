@@ -20,7 +20,7 @@ import org.openide.util.NbBundle;
 public class AltArchiveDataLoader extends UniFileLoader {
 
 
-    static final String ALTARCHIVE_MIME_TYPE = "application/x-tar";   //NOI18N
+    static final String ALTARCHIVE_MIME_TYPE = "application/x-alt-archive";   //NOI18N
 
     private static final long serialVersionUID = 1L;
 
@@ -41,7 +41,7 @@ public class AltArchiveDataLoader extends UniFileLoader {
 
     @Override
     protected String actionsContext() {
-       return "Loaders/application/x-tar/Actions/"; // NOI18N
+       return "Loaders/application/x-alt-archive/Actions/"; // NOI18N
     }
 
     protected MultiDataObject createMultiObject(FileObject primaryFile) throws DataObjectExistsException, IOException {

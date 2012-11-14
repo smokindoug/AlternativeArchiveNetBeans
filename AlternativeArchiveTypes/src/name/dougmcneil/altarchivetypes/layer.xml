@@ -3,7 +3,7 @@
 <filesystem>
     <folder name="Loaders">
         <folder name="application">
-            <folder name="x-tar">
+            <folder name="x-alt-archive">
                 <folder name="Actions">
                     <file name="org-openide-actions-CopyAction.shadow">
                         <attr name="originalFile" stringvalue="Actions/Edit/org-openide-actions-CopyAction.instance"/>
@@ -76,14 +76,6 @@
         <folder name="MIMEResolver">
             <file name="AltArchiveResolver.xml" url="AltArchiveResolver.xml">
                 <attr name="displayName" bundlevalue="name.dougmcneil.altarchivetypes.Bundle#Services/MIMEResolver/AltArchiveResolver.xml"/>
-            </file>
-        </folder>
-    </folder>
-    <folder name="Templates">
-        <folder name="Other">
-            <file name="AltArchiveTemplate.tar" url="AltArchiveTemplate.tar">
-                <attr name="displayName" bundlevalue="name.dougmcneil.altarchivetypes.Bundle#Templates/Other/AltArchiveTemplate.tar"/>
-                <attr name="template" boolvalue="true"/>
             </file>
         </folder>
     </folder>

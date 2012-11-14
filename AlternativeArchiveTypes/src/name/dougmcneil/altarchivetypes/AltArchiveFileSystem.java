@@ -332,6 +332,7 @@ public class AltArchiveFileSystem extends AbstractFileSystem {
             FileUtil.copy(is, os);
         } finally {
             os.close();
+            is.close();
         }
 
         return new ByteArrayInputStream(os.toByteArray());

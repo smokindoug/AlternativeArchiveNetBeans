@@ -9,6 +9,11 @@ and open the template in the editor.
         <ext name="tar"/>
         <ext name="tgz"/>
         <ext name="gz"/>
-        <resolver mime="application/x-tar"/>
+        <ext name="bz"/>
+        <ext name="bz2"/>
+        <ext name="tbz"/>
+        <ext name="tbz2"/>
+        <ext name="cpio"/>
+        <resolver mime="application/x-alt-archive"/>
     </file>
 </MIME-resolver>
