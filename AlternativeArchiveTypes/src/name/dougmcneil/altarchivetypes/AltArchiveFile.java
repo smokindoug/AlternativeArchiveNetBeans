@@ -18,6 +18,7 @@ import java.util.zip.ZipException;
 import org.apache.commons.compress.archivers.tar.*;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
 import org.openide.util.Exceptions;
 
 /**
@@ -45,8 +46,11 @@ public class AltArchiveFile {
         } else if (file.getName().endsWith(".tbz") || file.getName().endsWith(".tbz2")) {
             _source = new TbzSourceHandler(file, new FileInputStream(file),  file.getName());
             return;
+        } else if (file.getName().endsWith(".tar")) {
+            _source = new TarSourceHandler(file,new FileInputStream(file),  file.getName());
+        } else if (file.getName().endsWith("xz")) {
+            _source = new XZSourceHandler(file,new FileInputStream(file),  file.getName());
         }
-        _source = new TarSourceHandler(file,new FileInputStream(file),  file.getName());
     }
 
     public AltArchiveFile(String path) throws ZipException, IOException {
@@ -301,22 +305,20 @@ public class AltArchiveFile {
         }
     }
 
-    private final class GzSourceHandler extends SourceHandler {
-
-        private Entry _entry;
-        GzSourceHandler(File file, InputStream is, String name)
+    private abstract class CompressSourceHandler extends SourceHandler {
+        CompressSourceHandler(File file, InputStream is, String name) 
                 throws IOException {
-            super(file, new GzipCompressorInputStream(is), name);
+            super(file, is, name);
             InputStream x = new FileInputStream(_file);
             x.mark(1024);
             byte[] buffer = new byte[1024];
             int read = x.read(buffer);
             if (read > 0) {
-                _isAltArchive = GzipCompressorInputStream.matches(buffer, read);
+                _isAltArchive = streamMatches(buffer, read);
             }
             x.close();
         }
-
+        
         @Override
         void enumerateEntries() throws IOException {
             if (_hasEnumerated) {
@@ -328,7 +330,7 @@ public class AltArchiveFile {
             }
             _is.close();
             _entries = new HashMap<String, AltArchiveEntry>(1);
-            Entry entry = new Entry(_file, 3, name.dougmcneil.altarchivetypes.AltArchiveFile.this);
+            Entry entry = new Entry(_file, fileAdjustment(), name.dougmcneil.altarchivetypes.AltArchiveFile.this);
             _entries.put(entry.getName(), entry);
         }
 
@@ -340,8 +342,34 @@ public class AltArchiveFile {
             if  (_file == null) {
                 return null;
             }
-            return new BufferedInputStream(new GzipCompressorInputStream(
-                    new FileInputStream(_file)));
+            return new BufferedInputStream(compressStreamForFile());
+        }
+
+        abstract protected boolean streamMatches(byte[] buffer, int read);
+        abstract protected int fileAdjustment();
+        abstract protected InputStream compressStreamForFile() throws IOException;
+    }
+    private final class GzSourceHandler extends CompressSourceHandler {
+        private Entry _entry;
+
+        GzSourceHandler(File file, InputStream is, String name)
+                throws IOException {
+            super(file, new GzipCompressorInputStream(is), name);
+        }
+        
+        @Override
+        protected boolean streamMatches(byte[] buffer, int read) {
+            return GzipCompressorInputStream.matches(buffer, read);
+        }
+        
+        @Override
+        protected int fileAdjustment() {
+            return 3;
+        }
+        
+        @Override
+        protected InputStream compressStreamForFile() throws IOException {
+            return new GzipCompressorInputStream(new FileInputStream(_file));
         }
 
     }
@@ -409,47 +437,52 @@ public class AltArchiveFile {
         }
     }
 
-    private final class Bz2SourceHandler extends SourceHandler {
-
+    private final class Bz2SourceHandler extends CompressSourceHandler {
         private Entry _entry;
+
         Bz2SourceHandler(File file, InputStream is, String name)
                 throws IOException {
             super(file, new BZip2CompressorInputStream(is), name);
-            InputStream x = new FileInputStream(_file);
-            x.mark(1024);
-            byte[] buffer = new byte[1024];
-            int read = x.read(buffer);
-            if (read > 0) {
-                _isAltArchive = BZip2CompressorInputStream.matches(buffer, read);
-            }
-            x.close();
         }
 
         @Override
-        void enumerateEntries() throws IOException {
-            if (_hasEnumerated) {
-                return;
-            }
-            _hasEnumerated = true;
-            if (!_isAltArchive) {
-                return;
-            }
-            _is.close();
-            _entries = new HashMap<String, AltArchiveEntry>(1);
-            Entry entry = new Entry(_file, 4, name.dougmcneil.altarchivetypes.AltArchiveFile.this);
-            _entries.put(entry.getName(), entry);
+        protected boolean streamMatches(byte[] buffer, int read) {
+            return BZip2CompressorInputStream.matches(buffer, read);
+        }
+        
+        @Override
+        protected int fileAdjustment() {
+            return 4;
+        }
+        
+        @Override
+        protected InputStream compressStreamForFile() throws IOException {
+            return new BZip2CompressorInputStream(new FileInputStream(_file));
+        }
+
+    }
+
+    private final class XZSourceHandler extends CompressSourceHandler {
+        private Entry _entry;
+
+        XZSourceHandler(File file, InputStream is, String name)
+                throws IOException {
+            super(file, new XZCompressorInputStream(is), name);
         }
 
         @Override
-        InputStream getInputStream(AltArchiveEntry entry) throws IOException {
-            if (entry == null) {
-                return null;
-            }
-            if  (_file == null) {
-                return null;
-            }
-            return new BufferedInputStream(new BZip2CompressorInputStream(
-                    new FileInputStream(_file)));
+        protected boolean streamMatches(byte[] buffer, int read) {
+            return XZCompressorInputStream.matches(buffer, read);
+        }
+        
+        @Override
+        protected int fileAdjustment() {
+            return 3;
+        }
+        
+        @Override
+        protected InputStream compressStreamForFile() throws IOException {
+            return new XZCompressorInputStream(new FileInputStream(_file));
         }
 
     }
