@@ -48,8 +48,10 @@ public class AltArchiveFile {
             return;
         } else if (file.getName().endsWith(".tar")) {
             _source = new TarSourceHandler(file,new FileInputStream(file),  file.getName());
-        } else if (file.getName().endsWith("xz")) {
+        } else if (file.getName().endsWith(".xz")) {
             _source = new XZSourceHandler(file,new FileInputStream(file),  file.getName());
+        } else if (file.getName().endsWith(".txz")) {
+            _source = new TxzSourceHandler(file,new FileInputStream(file),  file.getName());
         }
     }
 
@@ -460,6 +462,69 @@ public class AltArchiveFile {
             return new BZip2CompressorInputStream(new FileInputStream(_file));
         }
 
+    }
+
+    private final class TxzSourceHandler extends SourceHandler {
+        TxzSourceHandler(File file, InputStream is, String name)
+                throws IOException {
+            super(file, new XZCompressorInputStream(is), name);
+            _is.mark(1024);
+            byte[] buffer = new byte[1024];
+            int read = _is.read(buffer);
+            if (read > 0) {
+                _isAltArchive = TarArchiveInputStream.matches(buffer, read);
+                _is.reset();
+                if (!_isAltArchive && (read > 262)) {
+                    // try 7-zip all 0 test
+                    for (int i = 257; i < 261; i++) {
+                        if (buffer[i] != 0) {
+                            return;
+                        }
+                    }
+                    _isAltArchive = true;
+                }
+            }
+        }
+
+        @Override
+        void enumerateEntries() throws IOException {
+            if (_hasEnumerated) {
+                return;
+            }
+            _hasEnumerated = true;
+            if (!_isAltArchive) {
+                return;
+            }
+            _archiveStream = new TarArchiveInputStream(_is);
+            _entries = new HashMap<String, AltArchiveEntry>();
+            TarArchiveEntry entry;
+            while ((entry = _archiveStream.getNextTarEntry()) != null) {
+                _entries.put(entry.getName(), new TarEntry(entry, name.dougmcneil.altarchivetypes.AltArchiveFile.this));
+            }
+            _is.close();
+
+        }
+
+        @Override
+        InputStream getInputStream(AltArchiveEntry entry) throws IOException {
+            if (entry == null) {
+                return null;
+            }
+            if  (_file == null) {
+                return null;
+            }
+            _archiveStream.close();
+            _archiveStream = new TarArchiveInputStream(
+                    new BufferedInputStream(new XZCompressorInputStream(
+                    new FileInputStream(_file))));
+            TarArchiveEntry target;
+            while ((target = _archiveStream.getNextTarEntry()) != null) {
+                if (target.getName().equals(entry._name)) {
+                    return _archiveStream;
+                }
+            }
+            return null;
+        }
     }
 
     private final class XZSourceHandler extends CompressSourceHandler {

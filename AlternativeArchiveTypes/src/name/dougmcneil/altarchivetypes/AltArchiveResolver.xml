@@ -13,7 +13,8 @@ and open the template in the editor.
         <ext name="bz2"/>
         <ext name="tbz"/>
         <ext name="tbz2"/>
-        <ext name="cpio"/>
+        <ext name="xz"/>
+        <ext name="txz"/>
         <resolver mime="application/x-alt-archive"/>
     </file>
 </MIME-resolver>
